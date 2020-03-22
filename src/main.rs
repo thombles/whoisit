@@ -1,25 +1,18 @@
-//! whoisit
-//!
-//! An identd implementation for Linux, built as an excuse to play with async/await.
-//! It cheats somewhat by relying on `lsof` to locate the user who owns a given
-//! connection.
-//!
-//! On the bright side, it should be compliant with RFC 1413 and it supports queries
-//! from both IPv4 and IPv6 remote hosts.
-
 use futures::{SinkExt, StreamExt};
-use tokio::codec::{Framed, LinesCodec};
-use tokio::net::process::Command;
+use tokio_util::codec::{Framed, LinesCodec};
+use tokio::process::Command;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::time::timeout;
 
 use std::error::Error;
 use std::fmt;
 use std::io::{BufRead, BufReader, Cursor};
 use std::net::IpAddr;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let binding = ":::113";
+    let binding = ":::10113";
     let mut listener = TcpListener::bind(&binding).await?;
 
     loop {
@@ -36,8 +29,8 @@ async fn handle_client(socket: TcpStream) -> Result<(), Box<dyn Error + Send + S
 
     // Read one line of query
     // LinesCodec will accept either the required \r\n or a plain \n
-    let query = match client.next().await {
-        Some(Ok(q)) => q,
+    let query = match timeout(Duration::from_secs(60), client.next()).await {
+        Ok(Some(Ok(q))) => q,
         _ => return Err(IdentError::NoQuery.into()),
     };
 
